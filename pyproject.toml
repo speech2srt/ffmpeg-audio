@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ffmpeg-audio"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python library for streaming audio/video files using FFmpeg with automatic resampling and channel mixing"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,6 +12,11 @@ license = {text = "MIT"}
 dependencies = [
     "numpy>=1.26.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/speech2srt/ffmpeg-audio"
+Repository = "https://github.com/speech2srt/ffmpeg-audio"
+Issues = "https://github.com/speech2srt/ffmpeg-audio/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
