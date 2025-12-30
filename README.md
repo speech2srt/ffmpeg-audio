@@ -107,7 +107,7 @@ Read a specific time segment from an audio file.
 - `FileNotFoundError`: If file doesn't exist
 - `ValueError`: If time parameters are invalid
 - `FFmpegNotFoundError`: If FFmpeg is not installed or not in PATH
-- `FFmpegSegmentError`: If FFmpeg processing fails
+- `FFmpegAudioError`: If FFmpeg processing fails
 
 **Constants:**
 
@@ -126,17 +126,6 @@ Raised when FFmpeg is not installed or not available in PATH.
 #### `FFmpegAudioError`
 
 Raised when FFmpeg audio processing fails.
-
-**Attributes:**
-
-- `message`: Error message
-- `file_path`: Path to the file that caused the error (optional)
-- `returncode`: FFmpeg process return code (optional)
-- `stderr`: FFmpeg standard error output (optional)
-
-#### `FFmpegSegmentError`
-
-Raised when FFmpeg segment reading fails.
 
 **Attributes:**
 

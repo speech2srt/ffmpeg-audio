@@ -9,9 +9,8 @@ This package provides utilities for:
 
 import logging
 
-from ffmpeg_audio.audio_segment_reader import AudioSegmentReader
-from ffmpeg_audio.audio_streamer import AudioStreamer
-from ffmpeg_audio.exceptions import FFmpegAudioError, FFmpegNotFoundError, FFmpegSegmentError, UnsupportedFormatError
+from .exceptions import FFmpegAudioError, FFmpegNotFoundError, UnsupportedFormatError
+from .ffmpeg_audio import FFmpegAudio
 
 __version__ = "0.1.0"
 
@@ -22,10 +21,9 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 __all__ = [
-    "AudioStreamer",
-    "AudioSegmentReader",
+    "FFmpegAudio",
     "FFmpegNotFoundError",
     "FFmpegAudioError",
-    "FFmpegSegmentError",
     "UnsupportedFormatError",
 ]
+
