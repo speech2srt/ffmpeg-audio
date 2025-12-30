@@ -10,6 +10,7 @@ import subprocess
 from typing import Iterator, Optional
 
 import numpy as np
+
 from .exceptions import FFmpegAudioError, FFmpegNotFoundError, parse_ffmpeg_error
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,7 @@ class FFmpegAudio:
         file_path: str,
         start_ms: Optional[int] = None,
         duration_ms: Optional[int] = None,
+        timeout_ms: Optional[int] = 300000,
     ) -> np.ndarray:
         """
         读取音频文件的指定时间段（一次性读取）
@@ -237,6 +239,7 @@ class FFmpegAudio:
             file_path: 音频文件路径（支持所有 FFmpeg 支持的格式）
             start_ms: 开始时间（毫秒），默认为 None（如果 duration_ms 提供则默认为 0）
             duration_ms: 持续时间（毫秒），默认为 None（必须提供，不能与 start_ms 同时为 None）
+            timeout_ms: 超时时间（毫秒），默认为 300000（5分钟），None 表示不限制超时
 
         Returns:
             np.ndarray: 音频数据
@@ -246,15 +249,16 @@ class FFmpegAudio:
                 - 采样率: 固定为 SAMPLE_RATE (16000 Hz)
 
         Raises:
-            TypeError: start_ms 或 duration_ms 类型错误时抛出
+            TypeError: start_ms、duration_ms 或 timeout_ms 类型错误时抛出
             ValueError: 时间参数无效时抛出
                 - start_ms < 0
                 - duration_ms <= 0
+                - timeout_ms <= 0
                 - 两者都为 None
                 - start_ms 不为 None 但 duration_ms 为 None
             FileNotFoundError: 文件不存在
             FFmpegNotFoundError: FFmpeg 未安装或不在 PATH 中时抛出
-            FFmpegAudioError: FFmpeg 处理失败
+            FFmpegAudioError: FFmpeg 处理失败或超时
         """
         # 类型验证
         if start_ms is not None and not isinstance(start_ms, int):
@@ -262,6 +266,9 @@ class FFmpegAudio:
 
         if duration_ms is not None and not isinstance(duration_ms, int):
             raise TypeError(f"duration_ms must be an int or None, got: {type(duration_ms).__name__}")
+
+        if timeout_ms is not None and not isinstance(timeout_ms, int):
+            raise TypeError(f"timeout_ms must be an int or None, got: {type(timeout_ms).__name__}")
 
         # 逻辑验证
         if start_ms is None and duration_ms is None:
@@ -276,6 +283,9 @@ class FFmpegAudio:
 
         if duration_ms is not None and duration_ms <= 0:
             raise ValueError(f"duration_ms must be > 0, got {duration_ms}")
+
+        if timeout_ms is not None and timeout_ms <= 0:
+            raise ValueError(f"timeout_ms must be > 0, got {timeout_ms}")
 
         # 处理 start_ms 和 duration_ms 的逻辑
         if start_ms is None and duration_ms is not None:
@@ -341,7 +351,9 @@ class FFmpegAudio:
 
         try:
             # 读取所有输出数据（等待进程完成）
-            raw_bytes, stderr_bytes = process.communicate()
+            # 转换超时时间为秒（如果提供了超时时间）
+            timeout_sec = None if timeout_ms is None else timeout_ms / 1000.0
+            raw_bytes, stderr_bytes = process.communicate(timeout=timeout_sec)
 
             # 检查进程返回码
             if process.returncode != 0:
@@ -362,10 +374,6 @@ class FFmpegAudio:
 
             return audio_float32
 
-        except FileNotFoundError as e:
-            # 这里的 FileNotFoundError 是文件系统层面的错误（文件不存在）
-            # 与 subprocess.Popen 的 FileNotFoundError（FFmpeg 未找到）不同
-            raise FileNotFoundError(f"Audio file not found: {file_path}") from e
         except subprocess.TimeoutExpired:
             if process:
                 process.kill()
@@ -390,3 +398,11 @@ class FFmpegAudio:
                 except Exception:
                     pass
 
+                # 检查是否有错误（仅在进程已终止时检查）
+                # 虽然 communicate() 已等待完成，但为了一致性和健壮性，这里也检查
+                if process.returncode is not None and process.returncode != 0:
+                    try:
+                        stderr_output = process.stderr.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        stderr_output = ""
+                    raise parse_ffmpeg_error(stderr_output, file_path, process.returncode)
