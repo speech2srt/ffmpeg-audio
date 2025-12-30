@@ -76,7 +76,7 @@ Stream audio file in chunks.
 - `FileNotFoundError`: If the audio file does not exist
 - `PermissionError`: If permission is denied accessing the file
 - `UnsupportedFormatError`: If the file format is not supported or invalid
-- `FFmpegStreamError`: If FFmpeg process fails (for other errors)
+- `FFmpegAudioError`: If FFmpeg process fails (for other errors)
 
 **Constants:**
 
@@ -123,9 +123,9 @@ Raised when FFmpeg is not installed or not available in PATH.
 
 - `message`: Error message
 
-#### `FFmpegStreamError`
+#### `FFmpegAudioError`
 
-Raised when FFmpeg stream processing fails.
+Raised when FFmpeg audio processing fails.
 
 **Attributes:**
 

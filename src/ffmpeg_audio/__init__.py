@@ -11,7 +11,7 @@ import logging
 
 from ffmpeg_audio.audio_segment_reader import AudioSegmentReader
 from ffmpeg_audio.audio_streamer import AudioStreamer
-from ffmpeg_audio.exceptions import FFmpegNotFoundError, FFmpegSegmentError, FFmpegStreamError, UnsupportedFormatError
+from ffmpeg_audio.exceptions import FFmpegAudioError, FFmpegNotFoundError, FFmpegSegmentError, UnsupportedFormatError
 
 __version__ = "0.1.0"
 
@@ -25,7 +25,7 @@ __all__ = [
     "AudioStreamer",
     "AudioSegmentReader",
     "FFmpegNotFoundError",
-    "FFmpegStreamError",
+    "FFmpegAudioError",
     "FFmpegSegmentError",
     "UnsupportedFormatError",
 ]

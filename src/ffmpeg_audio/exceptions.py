@@ -47,8 +47,8 @@ class BaseError(Exception):
         self.stderr = stderr
 
 
-class FFmpegStreamError(BaseError):
-    """FFmpeg 流式读取错误"""
+class FFmpegAudioError(BaseError):
+    """FFmpeg 音频处理错误"""
 
     def __init__(
         self,
@@ -84,3 +84,42 @@ class UnsupportedFormatError(BaseError):
         stderr: Optional[str] = None,
     ):
         super().__init__(message, file_path, returncode, stderr)
+
+
+def parse_ffmpeg_error(
+    stderr: str,
+    file_path: str,
+    returncode: int,
+) -> Exception:
+    """
+    从 FFmpeg stderr 解析错误类型并返回对应的异常
+
+    Args:
+        stderr: FFmpeg 标准错误输出
+        file_path: 文件路径
+        returncode: FFmpeg 进程返回码
+
+    Returns:
+        对应的异常对象
+    """
+    stderr_lower = stderr.lower()
+
+    if "no such file or directory" in stderr_lower:
+        return FileNotFoundError(f"Audio file not found: {file_path}")
+    elif "permission denied" in stderr_lower:
+        return PermissionError(f"Permission denied accessing file: {file_path}")
+    elif "invalid data found when processing input" in stderr_lower:
+        return UnsupportedFormatError(
+            f"Unsupported or invalid audio format: {file_path}",
+            file_path=file_path,
+            returncode=returncode,
+            stderr=stderr,
+        )
+    else:
+        # 其他错误使用 FFmpegAudioError
+        return FFmpegAudioError(
+            f"FFmpeg process failed with return code {returncode}",
+            file_path=file_path,
+            returncode=returncode,
+            stderr=stderr,
+        )

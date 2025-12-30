@@ -10,44 +10,9 @@ import subprocess
 from typing import Iterator, Optional
 
 import numpy as np
-from ffmpeg_audio.exceptions import FFmpegNotFoundError, FFmpegStreamError, UnsupportedFormatError
+from ffmpeg_audio.exceptions import FFmpegNotFoundError, parse_ffmpeg_error
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_ffmpeg_error(stderr: str, file_path: str, returncode: int) -> Exception:
-    """
-    从 FFmpeg stderr 解析错误类型并返回对应的异常
-
-    Args:
-        stderr: FFmpeg 标准错误输出
-        file_path: 文件路径
-        returncode: FFmpeg 进程返回码
-
-    Returns:
-        对应的异常对象
-    """
-    stderr_lower = stderr.lower()
-
-    if "no such file or directory" in stderr_lower:
-        return FileNotFoundError(f"Audio file not found: {file_path}")
-    elif "permission denied" in stderr_lower:
-        return PermissionError(f"Permission denied accessing file: {file_path}")
-    elif "invalid data found when processing input" in stderr_lower:
-        return UnsupportedFormatError(
-            f"Unsupported or invalid audio format: {file_path}",
-            file_path=file_path,
-            returncode=returncode,
-            stderr=stderr,
-        )
-    else:
-        # 其他错误使用通用异常
-        return FFmpegStreamError(
-            f"FFmpeg process failed with return code {returncode}",
-            file_path=file_path,
-            returncode=returncode,
-            stderr=stderr,
-        )
 
 
 class AudioStreamer:
@@ -82,7 +47,7 @@ class AudioStreamer:
             FileNotFoundError: 文件不存在时抛出
             PermissionError: 文件权限不足时抛出
             UnsupportedFormatError: 文件格式不支持时抛出
-            FFmpegStreamError: FFmpeg 进程失败时抛出
+            FFmpegAudioError: FFmpeg 进程失败时抛出
         """
         # 参数验证
         if not isinstance(file_path, str) or not file_path.strip():
@@ -150,7 +115,7 @@ class AudioStreamer:
                     # 进程已终止，检查是否有错误
                     if process.returncode != 0:
                         stderr_output = process.stderr.read().decode("utf-8", errors="ignore")
-                        raise _parse_ffmpeg_error(stderr_output, file_path, process.returncode)
+                        raise parse_ffmpeg_error(stderr_output, file_path, process.returncode)
                     # 进程正常结束，退出循环
                     break
 
@@ -194,4 +159,4 @@ class AudioStreamer:
                         stderr_output = process.stderr.read().decode("utf-8", errors="ignore")
                     except Exception:
                         stderr_output = ""
-                    raise _parse_ffmpeg_error(stderr_output, file_path, process.returncode)
+                    raise parse_ffmpeg_error(stderr_output, file_path, process.returncode)
