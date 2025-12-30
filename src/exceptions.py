@@ -1,28 +1,39 @@
 """
-异常类定义
+Exception classes for FFmpeg audio processing errors.
 
-提供统一的异常接口，便于错误处理和调试。
+Provides a hierarchy of exceptions for different error conditions,
+enabling precise error handling and debugging.
 """
 
 from typing import Optional
 
 
 class FFmpegNotFoundError(Exception):
-    """FFmpeg 未找到错误 - 当系统未安装 FFmpeg 或 FFmpeg 不在 PATH 中时抛出"""
+    """
+    Raised when FFmpeg executable is not found in system PATH.
+
+    This exception indicates that FFmpeg is either not installed or not accessible
+    from the current environment. Users should install FFmpeg and ensure it's in PATH.
+    """
 
     def __init__(self, message: str):
         """
-        初始化异常
+        Initialize exception.
 
         Args:
-            message: 错误消息
+            message: Human-readable error message describing the issue.
         """
         super().__init__(message)
         self.message = message
 
 
 class BaseError(Exception):
-    """基础异常类，提供统一的异常接口"""
+    """
+    Base exception class for FFmpeg processing errors.
+
+    Provides common attributes for error context: file path, process return code,
+    and stderr output. All FFmpeg-related exceptions inherit from this class.
+    """
 
     def __init__(
         self,
@@ -32,13 +43,13 @@ class BaseError(Exception):
         stderr: Optional[str] = None,
     ):
         """
-        初始化异常
+        Initialize exception with error context.
 
         Args:
-            message: 错误消息（必选）
-            file_path: 文件路径（可选）
-            returncode: FFmpeg 进程返回码（可选）
-            stderr: FFmpeg 标准错误输出（可选）
+            message: Primary error message (required).
+            file_path: Path to the file that caused the error (optional).
+            returncode: FFmpeg process exit code (optional).
+            stderr: FFmpeg stderr output for debugging (optional).
         """
         super().__init__(message)
         self.message = message
@@ -48,7 +59,12 @@ class BaseError(Exception):
 
 
 class FFmpegAudioError(BaseError):
-    """FFmpeg 音频处理错误"""
+    """
+    General FFmpeg audio processing error.
+
+    Raised when FFmpeg fails for reasons other than file not found, permission denied,
+    or unsupported format. Contains process return code and stderr for debugging.
+    """
 
     def __init__(
         self,
@@ -61,7 +77,12 @@ class FFmpegAudioError(BaseError):
 
 
 class UnsupportedFormatError(BaseError):
-    """不支持的音频格式错误 - 当文件格式无法被 FFmpeg 解码时抛出"""
+    """
+    Raised when audio file format is unsupported or corrupted.
+
+    This exception indicates that FFmpeg cannot decode the file, either because
+    the format is not supported or the file is corrupted/invalid.
+    """
 
     def __init__(
         self,
@@ -79,18 +100,26 @@ def parse_ffmpeg_error(
     returncode: int,
 ) -> Exception:
     """
-    从 FFmpeg stderr 解析错误类型并返回对应的异常
+    Parse FFmpeg stderr to determine error type and return appropriate exception.
+
+    Analyzes FFmpeg error messages to map generic process failures to specific
+    Python exceptions, improving error handling and user experience.
 
     Args:
-        stderr: FFmpeg 标准错误输出
-        file_path: 文件路径
-        returncode: FFmpeg 进程返回码
+        stderr: FFmpeg standard error output (may contain error messages).
+        file_path: Path to the file being processed.
+        returncode: FFmpeg process exit code (non-zero indicates error).
 
     Returns:
-        对应的异常对象
+        Exception object of the appropriate type:
+        - FileNotFoundError: File does not exist
+        - PermissionError: Access denied
+        - UnsupportedFormatError: Format not supported or corrupted
+        - FFmpegAudioError: Other FFmpeg errors
     """
     stderr_lower = stderr.lower()
 
+    # Check for specific error patterns in stderr
     if "no such file or directory" in stderr_lower:
         return FileNotFoundError(f"Audio file not found: {file_path}")
     elif "permission denied" in stderr_lower:
@@ -103,7 +132,7 @@ def parse_ffmpeg_error(
             stderr=stderr,
         )
     else:
-        # 其他错误使用 FFmpegAudioError
+        # Fallback to generic FFmpeg error for unrecognized error patterns
         return FFmpegAudioError(
             f"FFmpeg process failed with return code {returncode}",
             file_path=file_path,
