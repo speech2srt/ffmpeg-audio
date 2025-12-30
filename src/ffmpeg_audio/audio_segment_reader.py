@@ -5,10 +5,13 @@
 支持所有 FFmpeg 支持的音频/视频格式（包括 Opus、MP3、WAV、FLAC 等）。
 """
 
+import logging
 import subprocess
 
 import numpy as np
 from ffmpeg_audio.exceptions import FFmpegNotFoundError, FFmpegSegmentError
+
+logger = logging.getLogger(__name__)
 
 
 class AudioSegmentReader:

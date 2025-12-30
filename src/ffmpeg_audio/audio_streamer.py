@@ -5,11 +5,14 @@ FFmpeg 音频流类
 并在读取过程中自动完成重采样(16k)和声道混合(mono)。
 """
 
+import logging
 import subprocess
 from typing import Iterator, Optional
 
 import numpy as np
 from ffmpeg_audio.exceptions import FFmpegNotFoundError, FFmpegStreamError
+
+logger = logging.getLogger(__name__)
 
 
 class AudioStreamer:
@@ -41,9 +44,15 @@ class AudioStreamer:
             FFmpegNotFoundError: FFmpeg 未安装或不在 PATH 中时抛出
             FFmpegStreamError: FFmpeg 进程失败时抛出
         """
-        # 使用默认值如果未提供
+        # 使用默认值如果未提供或无效
         if chunk_duration_sec is None:
             chunk_duration_sec = AudioStreamer.STREAM_CHUNK_DURATION_SEC
+        elif chunk_duration_sec <= 0:
+            logger.warning(
+                f"Invalid `chunk_duration_sec` ({chunk_duration_sec}). Using default: {AudioStreamer.STREAM_CHUNK_DURATION_SEC}",
+            )
+            chunk_duration_sec = AudioStreamer.STREAM_CHUNK_DURATION_SEC
+
         # 构建 ffmpeg 命令（不使用 shlex，直接使用列表形式）
         # -i input: 输入文件
         # -vn: 禁用视频流
