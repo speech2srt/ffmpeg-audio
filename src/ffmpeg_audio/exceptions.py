@@ -71,3 +71,16 @@ class FFmpegSegmentError(BaseError):
         stderr: Optional[str] = None,
     ):
         super().__init__(message, file_path, returncode, stderr)
+
+
+class UnsupportedFormatError(BaseError):
+    """不支持的音频格式错误 - 当文件格式无法被 FFmpeg 解码时抛出"""
+
+    def __init__(
+        self,
+        message: str,
+        file_path: Optional[str] = None,
+        returncode: Optional[int] = None,
+        stderr: Optional[str] = None,
+    ):
+        super().__init__(message, file_path, returncode, stderr)

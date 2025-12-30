@@ -70,8 +70,13 @@ Stream audio file in chunks.
 
 **Raises:**
 
+- `TypeError`: If `chunk_duration_sec` is not an int or None
+- `ValueError`: If `file_path` is empty or invalid
 - `FFmpegNotFoundError`: If FFmpeg is not installed or not in PATH
-- `FFmpegStreamError`: If FFmpeg process fails
+- `FileNotFoundError`: If the audio file does not exist
+- `PermissionError`: If permission is denied accessing the file
+- `UnsupportedFormatError`: If the file format is not supported or invalid
+- `FFmpegStreamError`: If FFmpeg process fails (for other errors)
 
 **Constants:**
 
@@ -132,6 +137,17 @@ Raised when FFmpeg stream processing fails.
 #### `FFmpegSegmentError`
 
 Raised when FFmpeg segment reading fails.
+
+**Attributes:**
+
+- `message`: Error message
+- `file_path`: Path to the file that caused the error (optional)
+- `returncode`: FFmpeg process return code (optional)
+- `stderr`: FFmpeg standard error output (optional)
+
+#### `UnsupportedFormatError`
+
+Raised when the audio file format is not supported or contains invalid data.
 
 **Attributes:**
 
