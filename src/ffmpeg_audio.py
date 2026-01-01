@@ -7,6 +7,7 @@ All audio is automatically resampled to 16kHz and converted to mono channel.
 """
 
 import logging
+import os
 import subprocess
 from typing import Iterator, Optional
 
@@ -15,6 +16,18 @@ import numpy as np
 from .exceptions import FFmpegAudioError, FFmpegNotFoundError, parse_ffmpeg_error
 
 logger = logging.getLogger(__name__)
+
+
+def _get_stream_chunk_duration_sec() -> int:
+    """Get stream chunk duration from environment variable, compatible with non-standard values, defaults to 1200 seconds"""
+    env_val = os.getenv("STREAM_CHUNK_DURATION_SEC", "").strip()
+    if not env_val:
+        return 1200
+    try:
+        value = int(env_val)
+        return value if value > 0 else 1200
+    except (ValueError, TypeError):
+        return 1200
 
 
 class FFmpegAudio:
@@ -27,7 +40,7 @@ class FFmpegAudio:
 
     SAMPLE_RATE = 16000  # Output sample rate in Hz
     AUDIO_CHANNELS = 1  # Output channel count (mono)
-    STREAM_CHUNK_DURATION_SEC = 1200  # Default chunk duration for streaming (20 minutes)
+    STREAM_CHUNK_DURATION_SEC = _get_stream_chunk_duration_sec()  # Chunk duration for streaming, defaults to 1200s (20 minutes) if env var not set or invalid
 
     @staticmethod
     def stream(
