@@ -19,6 +19,29 @@ pip install ffmpeg-audio
 
 **Note**: This package requires FFmpeg to be installed on your system. Make sure FFmpeg is available in your PATH.
 
+## Configuration
+
+### Environment Variables
+
+The library supports configuration through environment variables:
+
+- `FFMPEG_STREAM_CHUNK_DURATION_SEC`: Default chunk duration (in seconds) for streaming operations. If not set or invalid, defaults to 1200 seconds (20 minutes). The value must be a positive integer. Non-standard values (empty strings, non-numeric strings, negative numbers, or zero) will fall back to the default value.
+
+**Example:**
+
+```bash
+# Set default chunk duration to 5 minutes (300 seconds)
+export FFMPEG_STREAM_CHUNK_DURATION_SEC=300
+
+# Use in Python
+from ffmpeg_audio import FFmpegAudio
+
+# Will use 300 seconds as default chunk duration
+for chunk in FFmpegAudio.stream("audio.mp3"):
+    # Process chunk
+    pass
+```
+
 ## Quick Start
 
 ### Streaming Audio
@@ -76,7 +99,7 @@ Main class for processing audio/video files. All methods are static.
 
 - `FFmpegAudio.SAMPLE_RATE = 16000`: Output sample rate (Hz)
 - `FFmpegAudio.AUDIO_CHANNELS = 1`: Output channel count (mono)
-- `FFmpegAudio.STREAM_CHUNK_DURATION_SEC = 1200`: Default chunk duration for streaming (seconds)
+- `FFmpegAudio.STREAM_CHUNK_DURATION_SEC`: Default chunk duration for streaming (seconds). Can be configured via `FFMPEG_STREAM_CHUNK_DURATION_SEC` environment variable. Defaults to 1200 seconds (20 minutes) if not set or invalid.
 
 #### `FFmpegAudio.stream(file_path, chunk_duration_sec=None, start_ms=None, duration_ms=None)`
 
@@ -87,7 +110,7 @@ This method reads audio in chunks to minimize memory usage for large files. Each
 **Parameters:**
 
 - `file_path` (str): Path to the audio/video file (supports all FFmpeg formats)
-- `chunk_duration_sec` (int, optional): Duration of each chunk in seconds. Defaults to `STREAM_CHUNK_DURATION_SEC` (1200s = 20 minutes). Must be > 0 if provided.
+- `chunk_duration_sec` (int, optional): Duration of each chunk in seconds. Defaults to `STREAM_CHUNK_DURATION_SEC` (1200s = 20 minutes), which can be configured via `FFMPEG_STREAM_CHUNK_DURATION_SEC` environment variable. Must be > 0 if provided.
 - `start_ms` (int, optional): Start position in milliseconds. None means from file beginning. If None but `duration_ms` is provided, defaults to 0.
 - `duration_ms` (int, optional): Total duration to read in milliseconds. None means read until end. If specified, reading stops when this duration is reached.
 

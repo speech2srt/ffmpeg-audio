@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def _get_stream_chunk_duration_sec() -> int:
     """Get stream chunk duration from environment variable, compatible with non-standard values, defaults to 1200 seconds"""
-    env_val = os.getenv("STREAM_CHUNK_DURATION_SEC", "").strip()
+    env_val = os.getenv("FFMPEG_STREAM_CHUNK_DURATION_SEC", "").strip()
     if not env_val:
         return 1200
     try:
