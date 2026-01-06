@@ -30,6 +30,23 @@ def _get_stream_chunk_duration_sec() -> int:
         return 1200
 
 
+def _get_default_timeout_ms() -> int:
+    """Get default timeout from environment variable, compatible with non-standard values, defaults to 300000 milliseconds (5 minutes)"""
+    env_val = os.getenv("FFMPEG_TIMEOUT_MS", "").strip()
+    if not env_val:
+        return 300000
+    try:
+        value = int(env_val)
+        return value if value > 0 else 300000
+    except (ValueError, TypeError):
+        return 300000
+
+
+# Module-level constants (can be used in function parameter defaults)
+_STREAM_CHUNK_DURATION_SEC = _get_stream_chunk_duration_sec()
+_DEFAULT_TIMEOUT_MS = _get_default_timeout_ms()
+
+
 class FFmpegAudio:
     """
     FFmpeg-based audio processor for streaming and segment reading.
@@ -40,14 +57,13 @@ class FFmpegAudio:
 
     SAMPLE_RATE = 16000  # Output sample rate in Hz
     AUDIO_CHANNELS = 1  # Output channel count (mono)
-    STREAM_CHUNK_DURATION_SEC = _get_stream_chunk_duration_sec()  # Chunk duration for streaming, defaults to 1200s (20 minutes) if env var not set or invalid
 
     @staticmethod
     def stream(
         file_path: str,
-        chunk_duration_sec: Optional[int] = None,
         start_ms: Optional[int] = None,
         duration_ms: Optional[int] = None,
+        chunk_duration_sec: int = _STREAM_CHUNK_DURATION_SEC,
     ) -> Iterator[np.ndarray]:
         """
         Stream audio file in chunks, yielding numpy arrays.
@@ -58,12 +74,11 @@ class FFmpegAudio:
 
         Args:
             file_path: Path to input audio/video file (supports all FFmpeg formats)
-            chunk_duration_sec: Duration of each chunk in seconds. Defaults to
-                STREAM_CHUNK_DURATION_SEC (1200s = 20 minutes). Must be > 0 if provided.
             start_ms: Start position in milliseconds. None means from file beginning.
-                If None but duration_ms is provided, defaults to 0.
             duration_ms: Total duration to read in milliseconds. None means read until end.
                 If specified, reading stops when this duration is reached.
+            chunk_duration_sec: Duration of each chunk in seconds. Defaults to 1200s (20 minutes, configurable via FFMPEG_STREAM_CHUNK_DURATION_SEC env var).
+                If <= 0, uses default with a warning.
 
         Yields:
             np.ndarray: Audio chunk as float32 array with shape (n_samples,).
@@ -71,7 +86,9 @@ class FFmpegAudio:
 
         Raises:
             TypeError: If parameter types are invalid.
-            ValueError: If file_path is empty or parameter values are invalid.
+            ValueError: If file_path is empty or parameter values are invalid (after auto-correction):
+                - start_ms < 0 (auto-corrected to None)
+                - duration_ms <= 0 (auto-corrected to None)
             FFmpegNotFoundError: If FFmpeg executable is not found in PATH.
             FileNotFoundError: If the input file does not exist.
             PermissionError: If file access is denied.
@@ -82,8 +99,8 @@ class FFmpegAudio:
         if not isinstance(file_path, str) or not file_path.strip():
             raise ValueError(f"file_path must be a non-empty string, got: {file_path!r}")
 
-        if chunk_duration_sec is not None and not isinstance(chunk_duration_sec, int):
-            raise TypeError(f"chunk_duration_sec must be an int or None, got: {type(chunk_duration_sec).__name__}")
+        if not isinstance(chunk_duration_sec, int):
+            raise TypeError(f"chunk_duration_sec must be an int, got: {type(chunk_duration_sec).__name__}")
 
         if start_ms is not None and not isinstance(start_ms, int):
             raise TypeError(f"start_ms must be an int or None, got: {type(start_ms).__name__}")
@@ -91,26 +108,23 @@ class FFmpegAudio:
         if duration_ms is not None and not isinstance(duration_ms, int):
             raise TypeError(f"duration_ms must be an int or None, got: {type(duration_ms).__name__}")
 
-        # Validate parameter values
+        # Validate and auto-correct parameter values
+        # If start_ms < 0, set to None (will read from beginning)
         if start_ms is not None and start_ms < 0:
-            raise ValueError(f"start_ms must be >= 0, got {start_ms}")
+            logger.warning(f"start_ms is negative ({start_ms}ms), setting to None. Will read from beginning of file.")
+            start_ms = None
 
+        # If duration_ms <= 0, set to None (will read to end)
         if duration_ms is not None and duration_ms <= 0:
-            raise ValueError(f"duration_ms must be > 0, got {duration_ms}")
+            logger.warning(f"duration_ms is invalid ({duration_ms}ms), setting to None. Will read to end of file.")
+            duration_ms = None
 
-        # Default start_ms to 0 if duration_ms is provided without start_ms
-        if start_ms is None and duration_ms is not None:
-            logger.warning(f"start_ms is None but duration_ms is provided ({duration_ms}ms). Using default start_ms=0")
-            start_ms = 0
-
-        # Apply default chunk duration if not provided or invalid
-        if chunk_duration_sec is None:
-            chunk_duration_sec = FFmpegAudio.STREAM_CHUNK_DURATION_SEC
-        elif chunk_duration_sec <= 0:
+        # Auto-correct invalid chunk duration
+        if chunk_duration_sec <= 0:
             logger.warning(
-                f"Invalid `chunk_duration_sec` ({chunk_duration_sec}). Using default: {FFmpegAudio.STREAM_CHUNK_DURATION_SEC}",
+                f"Invalid `chunk_duration_sec` ({chunk_duration_sec}). Using default: {_STREAM_CHUNK_DURATION_SEC}",
             )
-            chunk_duration_sec = FFmpegAudio.STREAM_CHUNK_DURATION_SEC
+            chunk_duration_sec = _STREAM_CHUNK_DURATION_SEC
 
         # Build FFmpeg command
         # Using list form (not shell string) to avoid injection vulnerabilities
@@ -246,13 +260,13 @@ class FFmpegAudio:
         file_path: str,
         start_ms: Optional[int] = None,
         duration_ms: Optional[int] = None,
-        timeout_ms: Optional[int] = 300000,
+        timeout_ms: int = _DEFAULT_TIMEOUT_MS,
     ) -> np.ndarray:
         """
-        Read a specific time segment from an audio file in one operation.
+        Read audio data from a file in one operation.
 
-        This method reads the entire segment into memory at once, suitable for small segments
-        or when the full segment is needed immediately. For large files or streaming use cases,
+        This method reads audio data into memory at once. If both start_ms and duration_ms
+        are None, it reads the entire file. For large files or streaming use cases,
         consider using stream() instead.
 
         The output format (16kHz mono float32) is optimized for speech processing and energy
@@ -261,27 +275,28 @@ class FFmpegAudio:
         Args:
             file_path: Path to audio/video file (supports all FFmpeg formats)
             start_ms: Start position in milliseconds. None means from beginning.
-                If None but duration_ms is provided, defaults to 0.
-            duration_ms: Segment duration in milliseconds. Must be provided (cannot be None
-                together with start_ms). If start_ms is provided, duration_ms is required.
-            timeout_ms: Maximum processing time in milliseconds. Defaults to 300000 (5 minutes).
-                Set to None to disable timeout (not recommended for production).
+                If both start_ms and duration_ms are None, reads the entire file.
+            duration_ms: Segment duration in milliseconds. None means read until end of file.
+                If start_ms is provided but duration_ms is None, reads from start_ms to end of file.
+                If both start_ms and duration_ms are None, reads the entire file.
+            timeout_ms: Maximum processing time in milliseconds. Defaults to 300000ms (5 minutes, configurable via FFMPEG_TIMEOUT_MS env var).
+                - If <= 0, uses default timeout with a warning.
+                - If > 0, uses the specified value.
+                - To disable timeout, explicitly pass a very large value (not recommended for production).
 
         Returns:
-            np.ndarray: Audio segment as float32 array with shape (n_samples,).
+            np.ndarray: Audio data as float32 array with shape (n_samples,).
                 - dtype: float32
-                - shape: (n_samples,) where n_samples = duration_ms * SAMPLE_RATE / 1000
+                - shape: (n_samples,) where n_samples depends on the audio duration
                 - value range: [-1.0, 1.0]
                 - sample rate: SAMPLE_RATE (16000 Hz)
 
         Raises:
             TypeError: If parameter types are invalid.
-            ValueError: If parameter values are invalid:
-                - start_ms < 0
-                - duration_ms <= 0
-                - timeout_ms <= 0
-                - Both start_ms and duration_ms are None
-                - start_ms is provided but duration_ms is None
+            ValueError: If parameter values are invalid (after auto-correction):
+                - start_ms < 0 (auto-corrected to None)
+                - duration_ms <= 0 (auto-corrected to None)
+                - timeout_ms <= 0 (auto-corrected to default timeout)
             FileNotFoundError: If the input file does not exist.
             FFmpegNotFoundError: If FFmpeg executable is not found in PATH.
             FFmpegAudioError: If FFmpeg processing fails or timeout is exceeded.
@@ -293,43 +308,46 @@ class FFmpegAudio:
         if duration_ms is not None and not isinstance(duration_ms, int):
             raise TypeError(f"duration_ms must be an int or None, got: {type(duration_ms).__name__}")
 
-        if timeout_ms is not None and not isinstance(timeout_ms, int):
-            raise TypeError(f"timeout_ms must be an int or None, got: {type(timeout_ms).__name__}")
+        if not isinstance(timeout_ms, int):
+            raise TypeError(f"timeout_ms must be an int, got: {type(timeout_ms).__name__}")
 
-        # Validate parameter logic: at least duration_ms must be provided
-        if start_ms is None and duration_ms is None:
-            raise ValueError("Both start_ms and duration_ms cannot be None. Please specify at least duration_ms.")
-
+        # Validate parameter logic
+        # If start_ms is specified but duration_ms is None, warn and allow reading to end of file
         if start_ms is not None and duration_ms is None:
-            raise ValueError("duration_ms must be provided when start_ms is specified.")
+            logger.warning(f"start_ms is specified ({start_ms}ms) but duration_ms is None. " "Will read from start_ms to end of file.")
 
-        # Validate parameter values
+        # Validate and auto-correct parameter values
+        # If start_ms < 0, set to None (will read from beginning)
         if start_ms is not None and start_ms < 0:
-            raise ValueError(f"start_ms must be >= 0, got {start_ms}")
+            logger.warning(f"start_ms is negative ({start_ms}ms), setting to None. Will read from beginning of file.")
+            start_ms = None
 
+        # If duration_ms <= 0, set to None (will read to end)
         if duration_ms is not None and duration_ms <= 0:
-            raise ValueError(f"duration_ms must be > 0, got {duration_ms}")
+            logger.warning(f"duration_ms is invalid ({duration_ms}ms), setting to None. Will read to end of file.")
+            duration_ms = None
 
-        if timeout_ms is not None and timeout_ms <= 0:
-            raise ValueError(f"timeout_ms must be > 0, got {timeout_ms}")
+        # Handle timeout_ms: auto-correct invalid values
+        # If timeout_ms <= 0, use default timeout with warning
+        if timeout_ms <= 0:
+            logger.warning(f"timeout_ms is invalid ({timeout_ms}ms), using default value {_DEFAULT_TIMEOUT_MS}ms.")
+            timeout_ms = _DEFAULT_TIMEOUT_MS
+        # else: timeout_ms > 0, use the specified value
 
-        # Default start_ms to 0 if only duration_ms is provided
-        if start_ms is None and duration_ms is not None:
-            logger.warning(f"start_ms is None but duration_ms is provided ({duration_ms}ms). Using default start_ms=0")
-            start_ms = 0
-
-        # Convert milliseconds to seconds for FFmpeg
-        start_sec = start_ms / 1000.0
-        duration_sec = duration_ms / 1000.0
+        # Convert milliseconds to seconds for FFmpeg (only if provided)
+        start_sec = start_ms / 1000.0 if start_ms is not None else None
+        duration_sec = duration_ms / 1000.0 if duration_ms is not None else None
 
         # Build FFmpeg command with input seeking for precision
         cmd = ["ffmpeg", "-v", "error"]  # Only show error-level messages
 
         # Add seeking before -i for input seeking (more precise than output seeking)
+        # Only add -ss if start_ms is specified
         if start_ms is not None:
             cmd.extend(["-ss", str(start_sec)])
 
-        # Add duration limit
+        # Add duration limit only if duration_ms is specified
+        # If both are None, FFmpeg will read the entire file
         if duration_ms is not None:
             cmd.extend(["-t", str(duration_sec)])
 
@@ -366,7 +384,7 @@ class FFmpegAudio:
 
         try:
             # Read all output in one operation (blocking until complete or timeout)
-            timeout_sec = None if timeout_ms is None else timeout_ms / 1000.0
+            timeout_sec = timeout_ms / 1000.0
             raw_bytes, stderr_bytes = process.communicate(timeout=timeout_sec)
 
             # Check for FFmpeg errors

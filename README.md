@@ -27,6 +27,8 @@ The library supports configuration through environment variables:
 
 - `FFMPEG_STREAM_CHUNK_DURATION_SEC`: Default chunk duration (in seconds) for streaming operations. If not set or invalid, defaults to 1200 seconds (20 minutes). The value must be a positive integer. Non-standard values (empty strings, non-numeric strings, negative numbers, or zero) will fall back to the default value.
 
+- `FFMPEG_TIMEOUT_MS`: Default timeout (in milliseconds) for read operations. If not set or invalid, defaults to 300000 milliseconds (5 minutes). The value must be a positive integer. Non-standard values will fall back to the default value.
+
 **Example:**
 
 ```bash
@@ -79,11 +81,14 @@ audio_data = FFmpegAudio.read(
     duration_ms=5000,  # 5 seconds
 )
 
-# Read from beginning (start_ms defaults to 0)
+# Read from beginning (5 seconds from start)
 audio_data = FFmpegAudio.read(
     file_path="audio.mp3",
     duration_ms=5000,  # 5 seconds from start
 )
+
+# Read entire file (no start_ms or duration_ms specified)
+audio_data = FFmpegAudio.read(file_path="audio.mp3")
 
 # audio_data is a numpy array (float32, range -1.0 ~ 1.0, 16kHz mono)
 print(f"Audio shape: {audio_data.shape}, sample rate: {FFmpegAudio.SAMPLE_RATE} Hz")
@@ -99,9 +104,8 @@ Main class for processing audio/video files. All methods are static.
 
 - `FFmpegAudio.SAMPLE_RATE = 16000`: Output sample rate (Hz)
 - `FFmpegAudio.AUDIO_CHANNELS = 1`: Output channel count (mono)
-- `FFmpegAudio.STREAM_CHUNK_DURATION_SEC`: Default chunk duration for streaming (seconds). Can be configured via `FFMPEG_STREAM_CHUNK_DURATION_SEC` environment variable. Defaults to 1200 seconds (20 minutes) if not set or invalid.
 
-#### `FFmpegAudio.stream(file_path, chunk_duration_sec=None, start_ms=None, duration_ms=None)`
+#### `FFmpegAudio.stream(file_path, start_ms=None, duration_ms=None, chunk_duration_sec=<default>)`
 
 Stream audio file in chunks, yielding numpy arrays.
 
@@ -110,9 +114,9 @@ This method reads audio in chunks to minimize memory usage for large files. Each
 **Parameters:**
 
 - `file_path` (str): Path to the audio/video file (supports all FFmpeg formats)
-- `chunk_duration_sec` (int, optional): Duration of each chunk in seconds. Defaults to `STREAM_CHUNK_DURATION_SEC` (1200s = 20 minutes), which can be configured via `FFMPEG_STREAM_CHUNK_DURATION_SEC` environment variable. Must be > 0 if provided.
-- `start_ms` (int, optional): Start position in milliseconds. None means from file beginning. If None but `duration_ms` is provided, defaults to 0.
-- `duration_ms` (int, optional): Total duration to read in milliseconds. None means read until end. If specified, reading stops when this duration is reached.
+- `start_ms` (int, optional): Start position in milliseconds. None means from file beginning. If < 0, will be auto-corrected to None with a warning.
+- `duration_ms` (int, optional): Total duration to read in milliseconds. None means read until end. If <= 0, will be auto-corrected to None with a warning.
+- `chunk_duration_sec` (int): Duration of each chunk in seconds. Defaults to 1200s (20 minutes), configurable via `FFMPEG_STREAM_CHUNK_DURATION_SEC` environment variable. If <= 0, will be auto-corrected to default with a warning.
 
 **Yields:**
 
@@ -121,31 +125,33 @@ This method reads audio in chunks to minimize memory usage for large files. Each
 **Raises:**
 
 - `TypeError`: If parameter types are invalid
-- `ValueError`: If `file_path` is empty or parameter values are invalid
+- `ValueError`: If `file_path` is empty or parameter values are invalid (after auto-correction):
+  - `start_ms < 0` (auto-corrected to None)
+  - `duration_ms <= 0` (auto-corrected to None)
 - `FFmpegNotFoundError`: If FFmpeg executable is not found in PATH
 - `FileNotFoundError`: If the input file does not exist
 - `PermissionError`: If file access is denied
 - `UnsupportedFormatError`: If file format is not supported or corrupted
 - `FFmpegAudioError`: For other FFmpeg processing errors
 
-#### `FFmpegAudio.read(file_path, start_ms=None, duration_ms=None, timeout_ms=300000)`
+#### `FFmpegAudio.read(file_path, start_ms=None, duration_ms=None, timeout_ms=<default>)`
 
-Read a specific time segment from an audio file in one operation.
+Read audio data from a file in one operation.
 
-This method reads the entire segment into memory at once, suitable for small segments or when the full segment is needed immediately. For large files or streaming use cases, consider using `stream()` instead.
+This method reads audio data into memory at once. If both `start_ms` and `duration_ms` are None, it reads the entire file. For large files or streaming use cases, consider using `stream()` instead.
 
 The output format (16kHz mono float32) is optimized for speech processing and energy detection algorithms.
 
 **Parameters:**
 
 - `file_path` (str): Path to audio/video file (supports all FFmpeg formats)
-- `start_ms` (int, optional): Start position in milliseconds. None means from beginning. If None but `duration_ms` is provided, defaults to 0.
-- `duration_ms` (int, optional): Segment duration in milliseconds. Must be provided (cannot be None together with `start_ms`). If `start_ms` is provided, `duration_ms` is required.
-- `timeout_ms` (int, optional): Maximum processing time in milliseconds. Defaults to 300000 (5 minutes). Set to None to disable timeout (not recommended for production).
+- `start_ms` (int, optional): Start position in milliseconds. None means from beginning. If < 0, will be auto-corrected to None with a warning. If specified but `duration_ms` is None, reads from `start_ms` to end of file.
+- `duration_ms` (int, optional): Segment duration in milliseconds. None means read until end of file. If <= 0, will be auto-corrected to None with a warning. If `start_ms` is provided but `duration_ms` is None, reads from `start_ms` to end of file. If both are None, reads the entire file.
+- `timeout_ms` (int): Maximum processing time in milliseconds. Defaults to 300000ms (5 minutes), configurable via `FFMPEG_TIMEOUT_MS` environment variable. If <= 0, will be auto-corrected to default with a warning.
 
 **Returns:**
 
-- `np.ndarray`: Audio segment as float32 array with shape `(n_samples,)` where `n_samples = duration_ms * SAMPLE_RATE / 1000`
+- `np.ndarray`: Audio data as float32 array with shape `(n_samples,)` where `n_samples` depends on the audio duration
   - dtype: float32
   - value range: [-1.0, 1.0]
   - sample rate: SAMPLE_RATE (16000 Hz)
@@ -153,12 +159,10 @@ The output format (16kHz mono float32) is optimized for speech processing and en
 **Raises:**
 
 - `TypeError`: If parameter types are invalid
-- `ValueError`: If parameter values are invalid:
-  - `start_ms < 0`
-  - `duration_ms <= 0`
-  - `timeout_ms <= 0`
-  - Both `start_ms` and `duration_ms` are None
-  - `start_ms` is provided but `duration_ms` is None
+- `ValueError`: If parameter values are invalid (after auto-correction):
+  - `start_ms < 0` (auto-corrected to None)
+  - `duration_ms <= 0` (auto-corrected to None)
+  - `timeout_ms <= 0` (auto-corrected to default timeout)
 - `FileNotFoundError`: If the input file does not exist
 - `FFmpegNotFoundError`: If FFmpeg executable is not found in PATH
 - `FFmpegAudioError`: If FFmpeg processing fails or timeout is exceeded

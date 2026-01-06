@@ -12,7 +12,7 @@ import logging
 from .exceptions import FFmpegAudioError, FFmpegNotFoundError, UnsupportedFormatError
 from .ffmpeg_audio import FFmpegAudio
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Configure library root logger
 # Use NullHandler to ensure library remains silent when user hasn't configured logging
